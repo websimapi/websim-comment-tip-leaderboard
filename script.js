@@ -164,10 +164,12 @@ const Leaderboard = () => {
              }
         };
 
-        window.websim.addEventListener('comment:created', handleNewComment);
+        const cleanup = window.websim.addEventListener('comment:created', handleNewComment);
 
         return () => {
-            window.websim.removeEventListener('comment:created', handleNewComment);
+            if (typeof cleanup === 'function') {
+                cleanup();
+            }
         };
     }, [project?.id]); // Rerun if project ID changes, though it's unlikely.
 
@@ -199,4 +201,3 @@ const App = () => {
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);
-
