@@ -96,7 +96,7 @@ const LeaderboardItem = ({ user, rank, customization, currentUser }) => {
     };
 
     const cardStyle = {
-        backgroundColor: customization?.backgroundColor,
+        background: customization?.backgroundColor,
     };
 
     return (
