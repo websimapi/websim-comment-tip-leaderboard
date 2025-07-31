@@ -89,7 +89,8 @@ const LeaderboardItem = ({ user, rank, customization, currentUser }) => {
         if (customization?.id) {
             await customizationsCollection.update(customization.id, data);
         } else {
-            await customizationsCollection.create(data);
+            // Explicitly add username to ensure the record is associated correctly from the client-side.
+            await customizationsCollection.create({ ...data, username: user.username });
         }
         setShowCustomize(false);
     };
