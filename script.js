@@ -51,26 +51,84 @@ const aggregateTips = (comments) => {
 
 // --- React Components ---
 
-const CustomizationControls = ({ user, customization, onSave }) => {
-    const [bgColor, setBgColor] = useState(customization?.backgroundColor || '#2c2c2c');
+const DEFAULTS = {
+    backgroundColor: '#2c2c2c',
+    gradientEnabled: false,
+    gradientColor1: '#3a3a3a',
+    gradientColor2: '#2c2c2c',
+    gradientAngle: 135,
+    animation: 'none',
+};
+
+const CustomizationControls = ({ customization, onSave }) => {
+    const [settings, setSettings] = useState({ ...DEFAULTS, ...customization });
+
+    useEffect(() => {
+        setSettings({ ...DEFAULTS, ...customization });
+    }, [customization]);
 
     const handleSave = () => {
-        onSave({ backgroundColor: bgColor });
+        onSave(settings);
+    };
+    
+    const handleReset = () => {
+        setSettings(DEFAULTS);
+        onSave(DEFAULTS);
+    }
+
+    const handleSettingChange = (key, value) => {
+        setSettings(prev => ({ ...prev, [key]: value }));
     };
 
     return (
         <div className="customization-controls">
             <h4>Customize Your Card</h4>
-            <div className="control-group">
-                <label htmlFor="bgColor">Background Color:</label>
-                <input
-                    type="color"
-                    id="bgColor"
-                    value={bgColor}
-                    onChange={(e) => setBgColor(e.target.value)}
-                />
+            
+            <fieldset className="control-group">
+                <legend>Background</legend>
+                <div className="control-row">
+                    <label htmlFor="bgColor">Solid Color</label>
+                    <input type="color" id="bgColor" value={settings.backgroundColor} onChange={(e) => handleSettingChange('backgroundColor', e.target.value)} disabled={settings.gradientEnabled} />
+                </div>
+                 <div className="control-row">
+                    <label htmlFor="gradientEnabled">Enable Gradient</label>
+                    <input type="checkbox" id="gradientEnabled" checked={settings.gradientEnabled} onChange={(e) => handleSettingChange('gradientEnabled', e.target.checked)} />
+                </div>
+                {settings.gradientEnabled && (
+                    <>
+                        <div className="control-row">
+                             <label htmlFor="gradientColor1">Color 1</label>
+                             <input type="color" id="gradientColor1" value={settings.gradientColor1} onChange={(e) => handleSettingChange('gradientColor1', e.target.value)} />
+                        </div>
+                         <div className="control-row">
+                            <label htmlFor="gradientColor2">Color 2</label>
+                            <input type="color" id="gradientColor2" value={settings.gradientColor2} onChange={(e) => handleSettingChange('gradientColor2', e.target.value)} />
+                        </div>
+                        <div className="control-row">
+                             <label htmlFor="gradientAngle">Angle</label>
+                             <input type="range" id="gradientAngle" min="0" max="360" value={settings.gradientAngle} onChange={(e) => handleSettingChange('gradientAngle', e.target.value)} />
+                             <span>{settings.gradientAngle}°</span>
+                        </div>
+                    </>
+                )}
+            </fieldset>
+
+            <fieldset className="control-group">
+                 <legend>Animation</legend>
+                 <div className="control-row">
+                    <label htmlFor="animation">Effect</label>
+                    <select id="animation" value={settings.animation} onChange={(e) => handleSettingChange('animation', e.target.value)}>
+                        <option value="none">None</option>
+                        <option value="glow">Glow</option>
+                        <option value="pulse">Pulse</option>
+                    </select>
+                </div>
+            </fieldset>
+
+            <div className="actions">
+                <button className="reset-btn" onClick={handleReset}>Reset</button>
+                <button onClick={handleSave}>Save</button>
             </div>
-            <button onClick={handleSave}>Save</button>
         </div>
     );
 };
@@ -89,18 +147,28 @@ const LeaderboardItem = ({ user, rank, customization, currentUser }) => {
         if (customization?.id) {
             await customizationsCollection.update(customization.id, data);
         } else {
-            // Explicitly add username to ensure the record is associated correctly from the client-side.
             await customizationsCollection.create({ ...data, username: user.username });
         }
         setShowCustomize(false);
     };
 
-    const cardStyle = {
-        background: customization?.backgroundColor,
-    };
+    const cardStyle = {};
+    const classNames = [`leaderboard-item rank-${rank}`];
+
+    const effectiveCustomization = { ...DEFAULTS, ...customization };
+
+    if (effectiveCustomization.gradientEnabled && effectiveCustomization.gradientColor1 && effectiveCustomization.gradientColor2) {
+        cardStyle.background = `linear-gradient(${effectiveCustomization.gradientAngle}deg, ${effectiveCustomization.gradientColor1}, ${effectiveCustomization.gradientColor2})`;
+    } else if (effectiveCustomization.backgroundColor) {
+        cardStyle.background = effectiveCustomization.backgroundColor;
+    }
+
+    if (effectiveCustomization.animation && effectiveCustomization.animation !== 'none') {
+        classNames.push(`animation-${effectiveCustomization.animation}`);
+    }
 
     return (
-        <li className={`leaderboard-item rank-${rank}`} style={cardStyle}>
+        <li className={classNames.join(' ')} style={cardStyle}>
             <div className="item-main-info">
                 <span className="rank">{rank}</span>
                 <img className="avatar" src={`https://images.websim.com/avatar/${user.username}`} alt={`${user.username}'s avatar`} />
@@ -115,7 +183,6 @@ const LeaderboardItem = ({ user, rank, customization, currentUser }) => {
                     </button>
                     {showCustomize && (
                         <CustomizationControls
-                            user={user}
                             customization={customization}
                             onSave={handleSaveCustomization}
                         />
@@ -130,6 +197,7 @@ const Leaderboard = () => {
     const [leaderboard, setLeaderboard] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
     const [project, setProject] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     const customizations = useSyncExternalStore(
         customizationsCollection.subscribe,
@@ -144,6 +212,7 @@ const Leaderboard = () => {
     }, [customizations]);
     
     const fetchData = async () => {
+        setIsLoading(true);
         const proj = await window.websim.getCurrentProject();
         setProject(proj);
         const user = await window.websim.getCurrentUser();
@@ -152,6 +221,7 @@ const Leaderboard = () => {
         const tipComments = await fetchAllTipComments(proj.id);
         const aggregatedData = aggregateTips(tipComments);
         setLeaderboard(aggregatedData);
+        setIsLoading(false);
     };
 
     useEffect(() => {
@@ -174,8 +244,12 @@ const Leaderboard = () => {
         };
     }, [project?.id]); // Rerun if project ID changes, though it's unlikely.
 
+    if (isLoading) {
+        return <div className="loading">Loading leaderboard...</div>;
+    }
+    
     if (leaderboard.length === 0) {
-        return <div className="loading">Loading leaderboard or no tips yet...</div>;
+        return <div className="loading">No tips have been given yet. Be the first!</div>;
     }
 
     return (
